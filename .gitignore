@@ -1,0 +1,7 @@
+instructions.txt
+__pycache__/
+*.pyc
+.modal.state.json
+.env
+*.log
+.DS_Store
