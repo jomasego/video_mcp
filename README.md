@@ -8,7 +8,7 @@ sdk_version: 5.33.0
 app_file: app.py
 pinned: false
 license: mit
-short_description: "MCP server extracting transcriptions, captions, and actions from videos for LLMs. Agents-MCP-Hackathon entry."
+short_description: "Video analysis (transcription, caption, actions) for LLMs."
 tags: ["mcp-server-track"]
 ---
 
