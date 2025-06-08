@@ -1,0 +1,421 @@
+Understood. It's crucial to handle credentials securely.
+
+**Important Security Note for AI Agents & Public Repositories:**
+
+When providing credentials to an AI agent, especially for code generation that might end up in a public repository (like Hugging Face Spaces), it's vital to *never hardcode them directly into the source code*. This is a major security risk.
+
+Instead, we should always use environment variables. This keeps your sensitive keys out of your code and out of public view. Both Hugging Face Spaces and Modal support setting environment variables.
+
+I will include instructions for SWE-1 on how to use these credentials via environment variables.
+
+---
+
+### Instructions for AI Agent (SWE-1) - "Contextual Video Data Server" (Updated with Credentials Handling)
+
+**Project Name:** Contextual Video Data Server (Your Hugging Face Space)
+
+**Goal:** To build a Gradio application deployed on Hugging Face Spaces that acts as a video processing and data serving backend. It will accept video uploads, transcribe their audio using a Modal-deployed Whisper model, and expose an API endpoint to serve this transcribed text. This server will be consumed by another Hugging Face Space (the "Model's Frontend") which will then interact with the Anthropic API.
+
+**Credentials to be Used (via Environment Variables):**
+
+* **Anthropic API Key:** `YOUR_ANTHROPIC_API_KEY_HERE` (This will be used by the *other* Hugging Face Space, the "Model's Frontend," not directly by this "MCP Tool/Server" Space. However, it's good to keep in mind for future steps).
+* **Modal Token ID:** `ak-MZoZD4vvq8KDMQJolFnix2`
+* **Modal Token Secret:** `as-pVhhGl2cv30MhKUV3sXJKb`
+* **HuggingFace Token:** `YOUR_HUGGINGFACE_TOKEN_HERE` (This is typically for logging into `huggingface_hub` for model downloads/uploads if needed, and also used by the Hugging Face Spaces platform itself for cloning repos etc.)
+
+**High-Level Plan:**
+
+1.  **Gradio App with API Endpoint:** Create a Gradio application that can upload videos and expose a function via an API.
+2.  **Modal Backend for Whisper Transcription:** Develop a Modal application to perform audio extraction and Whisper transcription.
+3.  **Integration:** Connect the Gradio app to the Modal backend.
+
+---
+
+**Detailed Instructions for SWE-1:**
+
+#### Part 1: Gradio Application Setup (The "MCP Tool/Server" Frontend)
+
+**Objective:** Create a basic Gradio application that handles video uploads and defines a function that can be exposed as an API endpoint. This function will initially just return a placeholder string.
+
+**Dependencies:**
+* `gradio`
+* `moviepy`
+* `requests` (added for future integration with Modal)
+
+**Files to Create:**
+* `app.py`
+* `requirements.txt`
+
+**`requirements.txt` content:**
+```
+gradio
+moviepy
+requests
+```
+
+**`app.py` content (initial structure):**
+
+```python
+import gradio as gr
+import os
+import requests
+import tempfile
+
+# Placeholder for the function that will process the video and return transcription.
+# This function will eventually call our Modal backend.
+def process_video_for_api(video_path: str) -> str:
+    """
+    Processes the uploaded video and returns its transcription.
+    This is the function that will be exposed via the Gradio API.
+    """
+    if video_path is None:
+        return "Error: No video file uploaded."
+
+    # In this initial version, we just return a placeholder.
+    # Later, this will call the Modal function.
+    print(f"Received video for processing: {video_path}")
+    return f"Video {os.path.basename(video_path)} received. Transcription pending from Modal."
+
+# Gradio Interface for the API endpoint
+# This interface will primarily be consumed by the "Model's Frontend" Space.
+api_interface = gr.Interface(
+    fn=process_video_for_api,
+    inputs=gr.Video(label="Video File for Transcription"),
+    outputs="text",
+    title="Video Transcription API",
+    description="Upload a video to get its audio transcription for AI context.",
+    allow_flagging="never"
+)
+
+# Gradio Interface for a simple user-facing demo (optional, but good for testing)
+def demo_process_video(video_path: str) -> str:
+    """
+    A simple demo function for the Gradio UI.
+    It calls the same backend logic as the API.
+    """
+    print(f"Demo received video: {video_path}")
+    result = process_video_for_api(video_path) # Call the core logic
+    return result
+
+demo_interface = gr.Interface(
+    fn=demo_process_video,
+    inputs=gr.Video(label="Upload Video for Demo"),
+    outputs="text",
+    title="Video Transcription Demo",
+    description="Upload a video to see its immediate transcription status (from the API).",
+    allow_flagging="never"
+)
+
+# Combine interfaces into a Blocks app for a better user experience in the Space.
+with gr.Blocks() as app:
+    gr.Markdown("# Contextual Video Data Server")
+    gr.Markdown("This Hugging Face Space acts as a backend for processing video context for AI models.")
+
+    with gr.Tab("API Endpoint (for AI Models)"):
+        gr.Markdown("### Use this endpoint from another application (e.g., another Hugging Face Space).")
+        gr.Markdown("The `process_video_for_api` function is exposed here.")
+        api_interface.render()
+
+    with gr.Tab("Demo (for Manual Testing)"):
+        gr.Markdown("### Manually test video uploads and observe the response.")
+        demo_interface.render()
+
+# Launch the Gradio application
+if __name__ == "__main__":
+    app.launch()
+```
+
+**Implementation Instructions:**
+
+1.  **Create Project Folder:** Create a new folder for your Hugging Face Space project (e.g., `video-data-server-space`).
+2.  **Create `requirements.txt`:** Inside this folder, create a file named `requirements.txt` and paste the content provided above.
+3.  **Create `app.py`:** Inside the same folder, create a file named `app.py` and paste the Python code provided above.
+4.  **Local Testing (Optional but Recommended):**
+    * Open your terminal or command prompt.
+    * Navigate to your project folder (`cd video-data-server-space`).
+    * Install dependencies: `pip install -r requirements.txt`
+    * Run the Gradio app: `python app.py`
+    * Open the URL provided by Gradio (usually `http://127.0.0.1:7860`) in your web browser.
+    * Test uploading a video. You should see the placeholder response.
+5.  **Hugging Face Spaces Deployment:**
+    * Create a new Space on Hugging Face.
+    * Choose "Gradio" as the SDK.
+    * Select "Public" or "Private" as per your preference.
+    * Select a hardware configuration (CPU Basic is fine for this initial placeholder).
+    * Upload your `app.py` and `requirements.txt` files to the Space.
+    * **Crucially, set environment variables for your Hugging Face Token (if you intend to use it within the Space for private models or repo access) and the Modal API URL (once it's known).** You do this in the Space settings under "Settings" -> "Repository secrets".
+        * `HF_TOKEN`: `YOUR_HUGGINGFACE_TOKEN_HERE` (Though for this specific app, it's not strictly necessary unless you're accessing private HF models or repos from within the Space).
+        * `MODAL_API_URL`: (Will be set in Part 3 after Modal deployment)
+    * Once deployed, the Space will be accessible. The API endpoint (`process_video_for_api`) will be available via the Space's URL. The exact API path will be shown in the Gradio documentation within the Space.
+
+#### Part 2: Modal Backend for Whisper Transcription
+
+**Objective:** Create a Modal application that can perform audio extraction from a video and transcribe it using OpenAI's Whisper model via the Hugging Face Transformers library. This will be an independent service that your Gradio app calls.
+
+**Dependencies:**
+* `modal-client`
+* `huggingface_hub`
+* `transformers`
+* `accelerate`
+* `soundfile`
+* `ffmpeg-python`
+* `moviepy`
+* `torch` (CPU version is fine for small models, GPU version if using larger models on a GPU-enabled Modal function)
+
+**Files to Create:**
+* `modal_whisper_app.py`
+
+**`modal_whisper_app.py` content:**
+
+```python
+import modal
+import io
+import torch
+from transformers import pipeline
+import moviepy.editor as mp
+import os
+import tempfile
+
+# Modal Stub for our application
+stub = modal.Stub(name="video-whisper-transcriber")
+
+# Define the image for our Modal function
+# We'll use a specific Hugging Face Transformers image or a custom one with dependencies
+whisper_image = (
+    modal.Image.debian_slim()
+    .apt_install("ffmpeg") # ffmpeg is essential for moviepy
+    .pip_install(
+        "transformers",
+        "accelerate",
+        "soundfile",
+        "moviepy",
+        "huggingface_hub",
+        "torch" # install torch for CPU by default
+    )
+    # If you need GPU, specify the CUDA version for torch and use GPU
+    # .pip_install("torch --index-url https://download.pytorch.org/whl/cu121")
+)
+
+@stub.function(
+    image=whisper_image,
+    # Configure resources for the function. For larger Whisper models, you might need a GPU.
+    # For 'tiny.en' or 'base.en', CPU might be sufficient, but GPU will be faster.
+    # gpu="A10G" # Uncomment and adjust if you need GPU (e.g., "A10G", "T4", etc.)
+    timeout=600 # 10 minutes timeout for potentially long videos
+)
+@modal.web_endpoint(method="POST") # Expose this function as a web endpoint
+def transcribe_video_audio(video_bytes: bytes) -> str:
+    """
+    Receives video bytes, extracts audio, and transcribes it using OpenAI Whisper.
+    """
+    if not video_bytes:
+        return "Error: No video bytes provided."
+
+    print("Received video bytes for transcription.")
+
+    # Save the received bytes to a temporary video file
+    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_video_file:
+        temp_video_file.write(video_bytes)
+        temp_video_path = temp_video_file.name
+
+    try:
+        # Load the video and extract audio
+        video = mp.VideoFileClip(temp_video_path)
+        
+        # Save audio to a temporary WAV file
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
+            temp_audio_path = temp_audio_file.name
+            video.audio.write_audiofile(temp_audio_path, logger=None) # logger=None to suppress ffmpeg output
+
+        # Initialize the Whisper ASR pipeline
+        # Using a small, English-only model for faster processing
+        # You can change 'tiny.en' to 'base.en', 'small.en', or 'medium.en' if needed.
+        # Ensure you have enough memory/GPU if using larger models.
+        # Use GPU if available on Modal, otherwise CPU.
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+        pipe = pipeline(
+            "automatic-speech-recognition",
+            model="openai/whisper-tiny.en", # Using the cheapest model as requested
+            torch_dtype=torch_dtype,
+            device=device,
+        )
+
+        # Transcribe the audio
+        print(f"Transcribing audio from {temp_audio_path} using Whisper on {device}...")
+        transcription_result = pipe(temp_audio_path, generate_kwargs={"task": "transcribe"})
+        transcribed_text = transcription_result["text"]
+        print("Transcription complete.")
+        
+        return transcribed_text
+
+    except Exception as e:
+        print(f"An error occurred during transcription: {e}")
+        return f"Error during video processing: {e}"
+    finally:
+        # Clean up temporary files
+        if 'temp_video_path' in locals() and os.path.exists(temp_video_path):
+            os.remove(temp_video_path)
+        if 'temp_audio_path' in locals() and os.path.exists(temp_audio_path):
+            os.remove(temp_audio_path)
+
+# You can add local testing code if needed
+@stub.local_entrypoint()
+def main():
+    print("To deploy this Modal application, run `modal deploy modal_whisper_app.py`.")
+    print("Ensure your Modal token is set using `modal token set --token-id <ID> --token-secret <SECRET>`")
+
+```
+
+**Implementation Instructions:**
+
+1.  **Install Modal CLI:** If you haven't already, install the Modal CLI: `pip install modal-client`
+2.  **Authenticate Modal:** Run the following command in your terminal to set your Modal credentials as environment variables for the CLI:
+    ```bash
+    modal token set --token-id ak-MZoZD4vvq8KDMQJolFnix2 --token-secret as-pVhhGl2cv30MhKUV3sXJKb
+    ```
+3.  **Create `modal_whisper_app.py`:** Create a file named `modal_whisper_app.py` and paste the content provided above.
+4.  **Review Dependencies and Resources:**
+    * The code defaults to CPU for `torch` and `whisper-tiny.en`. If you want to use a GPU for faster processing with Modal, uncomment `gpu="A10G"` (or your preferred GPU type) and adjust the `torch` installation line to include CUDA support (e.g., `pip_install("torch --index-url https://download.pytorch.org/whl/cu121")`). Remember to use the cheapest model (`tiny.en`) as requested.
+    * Consider the `timeout` for longer videos.
+5.  **Deploy to Modal:**
+    * Open your terminal or command prompt.
+    * Navigate to the directory where you saved `modal_whisper_app.py`.
+    * Deploy the Modal application: `modal deploy modal_whisper_app.py`
+    * Modal will provide you with a URL for the `transcribe_video_audio` endpoint (e.g., `https://your-workspace-name.modal.run/transcribe_video_audio`). **Keep this URL handy, as you'll need it in the next step.**
+
+#### Part 3: Integration: Connecting Gradio to Modal
+
+**Objective:** Modify the Gradio application (`app.py`) to call the deployed Modal endpoint for video transcription instead of returning a placeholder.
+
+**Dependencies:**
+* `requests` (already added in Part 1)
+
+**Files to Modify:**
+* `app.py`
+* `requirements.txt` (already updated in Part 1)
+
+**`app.py` modification:**
+
+You'll need to replace the placeholder logic in `process_video_for_api` with a call to your Modal endpoint.
+
+```python
+import gradio as gr
+import os
+import requests
+import tempfile
+
+# --- IMPORTANT ---
+# This URL MUST be set as an environment variable in your Hugging Face Space.
+# Name the environment variable MODAL_API_URL.
+# During local testing, you can uncomment and set it here temporarily.
+MODAL_API_URL = os.environ.get("MODAL_API_URL", "YOUR_MODAL_WHISPER_ENDPOINT_URL_HERE")
+# Example if testing locally: MODAL_API_URL = "https://your-workspace-name.modal.run/transcribe_video_audio"
+# --- IMPORTANT ---
+
+def process_video_for_api(video_path: str) -> str:
+    """
+    Processes the uploaded video and returns its transcription by calling the Modal backend.
+    """
+    if MODAL_API_URL == "YOUR_MODAL_WHISPER_ENDPOINT_URL_HERE":
+        return "Error: MODAL_API_URL is not set. Please configure it in your Hugging Face Space secrets."
+
+    if video_path is None:
+        return "Error: No video file uploaded."
+
+    print(f"Received video for processing: {video_path}")
+
+    try:
+        # Gradio provides a temporary path. We need to read the bytes to send to Modal.
+        with open(video_path, "rb") as video_file:
+            video_bytes = video_file.read()
+
+        print(f"Sending video bytes to Modal at {MODAL_API_URL}...")
+        response = requests.post(MODAL_API_URL, data=video_bytes)
+        response.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
+
+        transcribed_text = response.text
+        print("Transcription received from Modal.")
+        return transcribed_text
+
+    except requests.exceptions.RequestException as e:
+        print(f"Error calling Modal backend: {e}")
+        return f"Error communicating with transcription service: {e}"
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return f"An unexpected error occurred during processing: {e}"
+
+# The rest of your app.py remains the same.
+
+# Gradio Interface for the API endpoint
+api_interface = gr.Interface(
+    fn=process_video_for_api,
+    inputs=gr.Video(label="Video File for Transcription"),
+    outputs="text",
+    title="Video Transcription API",
+    description="Upload a video to get its audio transcription for AI context.",
+    allow_flagging="never"
+)
+
+# Gradio Interface for a simple user-facing demo (optional, but good for testing)
+def demo_process_video(video_path: str) -> str:
+    """
+    A simple demo function for the Gradio UI.
+    It calls the same backend logic as the API.
+    """
+    print(f"Demo received video: {video_path}")
+    result = process_video_for_api(video_path) # Call the core logic
+    return result
+
+demo_interface = gr.Interface(
+    fn=demo_process_video,
+    inputs=gr.Video(label="Upload Video for Demo"),
+    outputs="text",
+    title="Video Transcription Demo",
+    description="Upload a video to see its immediate transcription status (from the API).",
+    allow_flagging="never"
+)
+
+# Combine interfaces into a Blocks app for a better user experience in the Space.
+with gr.Blocks() as app:
+    gr.Markdown("# Contextual Video Data Server")
+    gr.Markdown("This Hugging Face Space acts as a backend for processing video context for AI models.")
+
+    with gr.Tab("API Endpoint (for AI Models)"):
+        gr.Markdown("### Use this endpoint from another application (e.g., another Hugging Face Space).")
+        gr.Markdown("The `process_video_for_api` function is exposed here.")
+        api_interface.render()
+
+    with gr.Tab("Demo (for Manual Testing)"):
+        gr.Markdown("### Manually test video uploads and observe the response.")
+        demo_interface.render()
+
+# Launch the Gradio application
+if __name__ == "__main__":
+    app.launch()
+```
+
+**Implementation Instructions:**
+
+1.  **Update `app.py`:**
+    * Paste the updated `process_video_for_api` function into your `app.py`.
+    * Note the line `MODAL_API_URL = os.environ.get("MODAL_API_URL", "YOUR_MODAL_WHISPER_ENDPOINT_URL_HERE")`. This tells the application to fetch the Modal API URL from an environment variable named `MODAL_API_URL`.
+2.  **Configure Hugging Face Space Secrets:**
+    * Go to your Hugging Face Space settings.
+    * Navigate to "Settings" -> "Repository secrets".
+    * Add a new secret:
+        * **Name:** `MODAL_API_URL`
+        * **Value:** Paste the actual URL you obtained after deploying your `modal_whisper_app.py` (e.g., `https://your-workspace-name.modal.run/transcribe_video_audio`).
+    * (Optional but recommended for general practice) Add `HF_TOKEN` with your Hugging Face token.
+3.  **Redeploy Gradio Space:**
+    * If you're using Git for your Hugging Face Space, commit and push your changes.
+    * If you're using the Hugging Face UI, upload the modified `app.py` to your Space.
+    * The Space will automatically rebuild and redeploy, now using the environment variable.
+4.  **Test the Full Flow:**
+    * Once your Gradio Space is live, go to the "Demo" tab.
+    * Upload a video.
+    * The Gradio app will now send the video to your Modal backend, which will transcribe it, and then the transcription will be returned and displayed in the Gradio UI.
+    * You can also test the API endpoint directly using tools like `curl` or Postman, or by building a small test script, pointing it to your Space's API URL (e.g., `https://your-username-video-data-server.hf.space/run/process_video_for_api`).
+
+This robust setup ensures your credentials are secure and your architecture is well-defined for the hackathon!
