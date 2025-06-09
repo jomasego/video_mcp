@@ -244,11 +244,12 @@ def process_video_input(input_string: str) -> Dict[str, Any]:
 # Gradio Interface for the API endpoint
 api_interface = gr.Interface(
     fn=process_video_input,
-    inputs=gr.Textbox(label="Video URL or Local File Path for Transcription", 
+    inputs=gr.Textbox(lines=1, label="Video URL or Local File Path for Interpretation"), 
                       placeholder="Enter YouTube URL, direct video URL (.mp4, .mov, etc.), or local file path..."),
     outputs=gr.JSON(label="API Response"),
-    title="Video Transcription API",
-    description="Provide a video URL or local file path to get its audio transcription. Output is JSON.",
+    title="Video Interpretation Input",
+                label="Video Interpretation",
+    description="Provide a video URL or local file path to get its interpretation status as JSON.",
     allow_flagging="never",
     examples=[
         ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
@@ -271,7 +272,8 @@ demo_interface = gr.Interface(
     inputs=gr.Textbox(label="Upload Video URL or Local File Path for Demo", 
                       placeholder="Enter YouTube URL, direct video URL (.mp4, .mov, etc.), or local file path..."),
     outputs="text",
-    title="Video Transcription Demo",
+    title="Video Interpretation Demo",
+                label="Video Interpretation Demo",
     description="Provide a video URL or local file path to see its transcription status.",
     allow_flagging="never"
 )
@@ -326,12 +328,12 @@ with gr.Blocks(head=f"<script>{js_code_for_head}</script>") as app:
 
     with gr.Tab("API Endpoint (for AI Models)"):
         gr.Markdown("### Use this endpoint from another application (e.g., another Hugging Face Space).")
-        gr.Markdown("The `process_video_input` function is exposed here.")
+        gr.Markdown("The `process_video_input` function (for video interpretation) is exposed here.")
         api_interface.render()
         gr.Markdown("**Note:** Some YouTube videos may fail to download if they require login or cookie authentication due to YouTube's restrictions. Direct video links are generally more reliable for automated processing.")
 
     with gr.Tab("Demo (for Manual Testing)"):
-        gr.Markdown("### Manually test video URLs or paths and observe the response.")
+        gr.Markdown("### Manually test video URLs or paths for interpretation and observe the JSON response.")
         demo_interface.render()
 
 # Launch the Gradio application
