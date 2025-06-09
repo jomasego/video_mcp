@@ -272,7 +272,6 @@ demo_interface = gr.Interface(
                       placeholder="Enter YouTube URL, direct video URL (.mp4, .mov, etc.), or local file path..."),
     outputs="text",
     title="Video Interpretation Demo",
-                label="Video Interpretation Demo",
     description="Provide a video URL or local file path to see its transcription status.",
     allow_flagging="never"
 )
