@@ -93,12 +93,18 @@ def download_video(url_string: str, temp_dir: str) -> str | None:
         return None
 
 
-def process_video_input(input_string: str) -> str:
+def process_video_input(input_string: str) -> Dict[str, Any]:
     """
-    Processes the video (from URL or local file path) and returns its transcription status.
+    Processes the video (from URL or local file path) and returns its transcription status as a JSON object.
     """
     if not input_string:
-        return "Error: No video URL or file path provided."
+        return {
+            "status": "error",
+            "error_details": {
+                "message": "No video URL or file path provided.",
+                "input_received": input_string
+            }
+        }
 
     video_path_to_process = None
     created_temp_dir = None  # To store path of temp directory if created for download
@@ -116,13 +122,25 @@ def process_video_input(input_string: str) -> str:
                 # Error message is already printed by download_video or this block
                 print(f"Failed to download or locate video from URL: {input_string}")
                 # Cleanup is handled in finally, so just return error
-                return "Error: Failed to download video from URL."
+                return {
+                    "status": "error",
+                    "error_details": {
+                        "message": "Failed to download video from URL.",
+                        "input_received": input_string
+                    }
+                }
         
         elif os.path.exists(input_string):
             print(f"Input is a local file path: {input_string}")
             video_path_to_process = input_string
         else:
-            return f"Error: Input '{input_string}' is not a valid URL or an existing file path."
+            return {
+                "status": "error",
+                "error_details": {
+                    "message": f"Input '{input_string}' is not a valid URL or an existing file path.",
+                    "input_received": input_string
+                }
+            }
 
         if video_path_to_process:
             print(f"Processing video: {video_path_to_process}")
@@ -155,28 +173,63 @@ def process_video_input(input_string: str) -> str:
                     # the lookup `modal.Function.lookup("whisper-transcriber", "transcribe_video_audio")` is standard.
                     # If it was deployed as part of the default app, then just "transcribe_video_audio" might work.
                     # Given the deployment log, the first lookup should be correct.
-                    return "Error: Could not find the deployed Modal function. Please check deployment status and name."
+                    return {
+                        "status": "error",
+                        "error_details": {
+                            "message": "Could not find the deployed Modal function. Please check deployment status and name.",
+                            "modal_function_name": "whisper-transcriber/transcribe_video_audio"
+                        }
+                    }
 
                 print("Calling Modal function for transcription...")
                 # Using .remote() for asynchronous execution, .call() for synchronous
                 # For Gradio, synchronous (.call()) might be simpler to handle the response directly.
                 transcription = f.remote(video_bytes_content) # Use .remote() for Modal function call
                 print(f"Received transcription from Modal: {transcription[:100]}...")
-                return transcription
+                return {
+                    "status": "success",
+                    "data": {
+                        "transcription": transcription
+                    }
+                }
             except FileNotFoundError:
                 print(f"Error: Video file not found at {video_path_to_process} before sending to Modal.")
-                return f"Error: Video file disappeared before processing."
+                return {
+                    "status": "error",
+                    "error_details": {
+                        "message": "Video file disappeared before processing.",
+                        "path_attempted": video_path_to_process
+                    }
+                }
             except modal.Error as e: # Using modal.Error as the base Modal exception
                 print(f"Modal specific error: {e}")
-                return f"Error during Modal operation: {str(e)}"
+                return {
+                    "status": "error",
+                    "error_details": {
+                        "message": f"Error during Modal operation: {str(e)}",
+                        "exception_type": type(e).__name__
+                    }
+                }
             except Exception as e:
                 print(f"An unexpected error occurred while calling Modal: {e}")
                 import traceback
                 traceback.print_exc()
-                return f"Error: Failed to get transcription. {str(e)}"
+                return {
+                    "status": "error",
+                    "error_details": {
+                        "message": f"Failed to get transcription: {str(e)}",
+                        "exception_type": type(e).__name__
+                    }
+                }
         else:
             # This case should ideally be caught by earlier checks
-            return "Error: No video available to process after input handling."
+            return {
+                "status": "error",
+                "error_details": {
+                    "message": "No video available to process after input handling.",
+                    "input_received": input_string
+                }
+            }
             
     finally:
         if created_temp_dir and os.path.exists(created_temp_dir):
@@ -192,10 +245,14 @@ api_interface = gr.Interface(
     fn=process_video_input,
     inputs=gr.Textbox(label="Video URL or Local File Path for Transcription", 
                       placeholder="Enter YouTube URL, direct video URL (.mp4, .mov, etc.), or local file path..."),
-    outputs="text",
+    outputs=gr.JSON(label="API Response"),
     title="Video Transcription API",
-    description="Provide a video URL or local file path to get its audio transcription status.",
-    allow_flagging="never"
+    description="Provide a video URL or local file path to get its audio transcription. Output is JSON.",
+    allow_flagging="never",
+    examples=[
+        ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
+        ["https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"]
+    ]
 )
 
 # Gradio Interface for a simple user-facing demo
