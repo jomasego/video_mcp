@@ -248,7 +248,6 @@ api_interface = gr.Interface(
                       placeholder="Enter YouTube URL, direct video URL (.mp4, .mov, etc.), or local file path..."),
     outputs=gr.JSON(label="API Response"),
     title="Video Interpretation Input",
-    label="Video Interpretation",
     description="Provide a video URL or local file path to get its interpretation status as JSON.",
     allow_flagging="never",
     examples=[
