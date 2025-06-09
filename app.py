@@ -6,6 +6,7 @@ import subprocess
 import re
 import shutil # Added for rmtree
 import modal
+from typing import Dict, Any # Added for type hinting
 
 def is_youtube_url(url_string: str) -> bool:
     """Checks if the given string is a YouTube URL."""
