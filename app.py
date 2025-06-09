@@ -276,26 +276,9 @@ demo_interface = gr.Interface(
     allow_flagging="never"
 )
 
-# Combine interfaces into a Blocks app
-with gr.Blocks() as app:
-    gr.Markdown("# Contextual Video Data Server")
-    gr.Markdown("This Hugging Face Space acts as a backend for processing video context for AI models.")
-
-    with gr.Tab("API Endpoint (for AI Models)"):
-        gr.Markdown("### Use this endpoint from another application (e.g., another Hugging Face Space).")
-        gr.Markdown("The `process_video_input` function is exposed here.")
-        api_interface.render()
-        gr.Markdown("**Note:** Some YouTube videos may fail to download if they require login or cookie authentication due to YouTube's restrictions. Direct video links are generally more reliable for automated processing.")
-
-    with gr.Tab("Demo (for Manual Testing)"):
-        gr.Markdown("### Manually test video URLs or paths and observe the response.")
-        demo_interface.render()
-
-# Launch the Gradio application
-if __name__ == "__main__":
-    # JavaScript to find and replace the 'Use via API' link text
-    # This attempts to change the text a few times in case Gradio renders elements late.
-    js_code = """
+# JavaScript to find and replace the 'Use via API' link text
+# This attempts to change the text a few times in case Gradio renders elements late.
+js_code_for_head = """
 (function() {
     console.log('[MCP Script] Initializing script to change API link text...');
     function attemptChangeApiLinkText() {
@@ -342,4 +325,22 @@ if __name__ == "__main__":
     }, 100);
 })();
 """
-    app.launch(js=js_code, server_name="0.0.0.0")
+
+# Combine interfaces into a Blocks app
+with gr.Blocks(head=f"<script>{js_code_for_head}</script>") as app:
+    gr.Markdown("# Contextual Video Data Server")
+    gr.Markdown("This Hugging Face Space acts as a backend for processing video context for AI models.")
+
+    with gr.Tab("API Endpoint (for AI Models)"):
+        gr.Markdown("### Use this endpoint from another application (e.g., another Hugging Face Space).")
+        gr.Markdown("The `process_video_input` function is exposed here.")
+        api_interface.render()
+        gr.Markdown("**Note:** Some YouTube videos may fail to download if they require login or cookie authentication due to YouTube's restrictions. Direct video links are generally more reliable for automated processing.")
+
+    with gr.Tab("Demo (for Manual Testing)"):
+        gr.Markdown("### Manually test video URLs or paths and observe the response.")
+        demo_interface.render()
+
+# Launch the Gradio application
+if __name__ == "__main__":
+    app.launch(server_name="0.0.0.0")
