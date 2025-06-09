@@ -292,4 +292,33 @@ with gr.Blocks() as app:
 
 # Launch the Gradio application
 if __name__ == "__main__":
-    app.launch(server_name="0.0.0.0")
+    # JavaScript to find and replace the 'Use via API' link text
+    # This attempts to change the text a few times in case Gradio renders elements late.
+    js_code = """
+(function() {
+    function attemptChangeApiLinkText() {
+        const links = document.querySelectorAll('a'); // Get all anchor tags
+        let changed = false;
+        for (let i = 0; i < links.length; i++) {
+            // Check if the link's text content is exactly 'Use via API'
+            if (links[i].textContent && links[i].textContent.trim() === 'Use via API') {
+                links[i].textContent = 'Use as an MCP or via API';
+                changed = true;
+                // If you only expect one such link and want to stop after the first, uncomment the next line
+                // break; 
+            }
+        }
+        return changed;
+    }
+
+    let attempts = 0;
+    const maxAttempts = 30; // Try for up to 3 seconds (30 * 100ms)
+    const intervalId = setInterval(() => {
+        if (attemptChangeApiLinkText() || attempts >= maxAttempts) {
+            clearInterval(intervalId);
+        }
+        attempts++;
+    }, 100);
+})();
+"""
+    app.launch(js=js_code, server_name="0.0.0.0")
