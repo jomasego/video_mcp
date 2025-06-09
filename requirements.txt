@@ -1,5 +1,3 @@
 gradio
-moviepy
 requests
 yt-dlp
-modal
