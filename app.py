@@ -281,44 +281,37 @@ demo_interface = gr.Interface(
 js_code_for_head = """
 (function() {
     console.log('[MCP Script] Initializing script to change API link text...');
+    let foundAndChangedGlobal = false; // Declare here to be accessible in setInterval
+
     function attemptChangeApiLinkText() {
         const links = document.querySelectorAll('a');
-        let foundAndChanged = false;
-        // console.log('[MCP Script] Found ' + links.length + ' anchor tags on this attempt.'); // Can be too verbose for interval
+        // console.log('[MCP Script] Found ' + links.length + ' anchor tags on this attempt.');
         for (let i = 0; i < links.length; i++) {
             const linkText = links[i].textContent ? links[i].textContent.trim() : '';
-            if (linkText === 'Use via API') {
+            if (linkText === 'Use via API' || linkText === 'Share via Link') { // Target both possible texts
                 links[i].textContent = 'Use as an MCP or via API';
-                console.log('[MCP Script] Successfully changed \"Use via API\" link text.');
-                foundAndChanged = true;
-                break; 
+                console.log('[MCP Script] Successfully changed link text from: ' + linkText);
+                foundAndChangedGlobal = true;
+                return true; // Indicate success
             }
         }
-        return foundAndChanged;
+        return false; // Indicate not found/changed in this attempt
     }
 
     let attempts = 0;
     const maxAttempts = 50; // Try for up to 5 seconds (50 * 100ms)
     let initialScanDone = false;
+
     const intervalId = setInterval(() => {
         if (!initialScanDone && attempts === 0) {
             console.log('[MCP Script] Performing initial scan for API link text.');
             initialScanDone = true;
         }
+
         if (attemptChangeApiLinkText() || attempts >= maxAttempts) {
             clearInterval(intervalId);
-            if (attempts >= maxAttempts && !foundAndChanged) {
-                // Check if the link was ever found and changed by a concurrent script or if it's truly not there
-                let stillNotFound = true;
-                const finalLinks = document.querySelectorAll('a');
-                for (let i = 0; i < finalLinks.length; i++) {
-                    if (finalLinks[i].textContent && finalLinks[i].textContent.trim() === 'Use as an MCP or via API') {
-                        stillNotFound = false; break;
-                    }
-                }
-                if (stillNotFound) {
-                    console.log('[MCP Script] Max attempts reached. \"Use via API\" link was not found or changed. It might not be rendered or has a different text.');
-                }
+            if (attempts >= maxAttempts && !foundAndChangedGlobal) {
+                console.log('[MCP Script] Max attempts reached. Target link was not found or changed. It might not be rendered or has a different initial text.');
             }
         }
         attempts++;
