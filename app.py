@@ -6,7 +6,7 @@ import subprocess
 import re
 import shutil # Added for rmtree
 import modal
-from typing import Dict, Any # Added for type hinting
+from typing import Dict, Any, Optional # Added for type hinting
 
 def is_youtube_url(url_string: str) -> bool:
     """Checks if the given string is a YouTube URL."""
@@ -158,41 +158,67 @@ def process_video_input(input_string: str) -> Dict[str, Any]:
                 # os.environ["MODAL_TOKEN_ID"] = "your_modal_token_id" # Replace or set in HF Space
                 # os.environ["MODAL_TOKEN_SECRET"] = "your_modal_token_secret" # Replace or set in HF Space
 
-                print("Looking up Modal function 'whisper-transcriber/transcribe_video_audio'...")
-                # The function name should match what was deployed. 
-                # It's typically 'AppName/FunctionName' or just 'FunctionName' if app is default.
-                # Based on your deployment log, app name is 'whisper-transcriber'
-                # and function is 'transcribe_video_audio'
-                try:
-                    f = modal.Function.from_name("whisper-transcriber", "transcribe_video_audio")
-                    print("Modal function looked up successfully.")
-                except modal.Error as e:
-                    print("Modal function 'whisper-transcriber/transcribe_video_audio' not found. Trying with just function name.")
-                    # Fallback or alternative lookup, though the above should be correct for named apps.
-                    # This might be needed if the app name context is implicit.
-                    # For a named app 'whisper-transcriber' and function 'transcribe_video_audio',
-                    # the lookup `modal.Function.lookup("whisper-transcriber", "transcribe_video_audio")` is standard.
-                    # If it was deployed as part of the default app, then just "transcribe_video_audio" might work.
-                    # Given the deployment log, the first lookup should be correct.
+                print("Preparing to call Modal FastAPI endpoint for comprehensive analysis...")
+                # IMPORTANT: Replace this with your actual Modal app's deployed FastAPI endpoint URL
+                # This URL is typically found in your Modal deployment logs or dashboard.
+                # It will look something like: https://YOUR_MODAL_WORKSPACE--video-analysis-gradio-pipeline-process-video-for-analysis.modal.run/analyze_video
+                # Or, if the FastAPI endpoint function itself is not separately deployed but part of the main app deployment:
+                # https://YOUR_MODAL_WORKSPACE--video-analysis-gradio-pipeline-fastapi-app.modal.run/analyze_video 
+                # (The exact name depends on how Modal names the deployed web endpoint for the FastAPI app)
+                # For now, using a placeholder. This MUST be configured.
+                base_modal_url = os.getenv("MODAL_APP_BASE_URL")
+                if not base_modal_url:
+                    print("ERROR: MODAL_APP_BASE_URL environment variable not set.")
                     return {
                         "status": "error",
                         "error_details": {
-                            "message": "Could not find the deployed Modal function. Please check deployment status and name.",
-                            "modal_function_name": "whisper-transcriber/transcribe_video_audio"
+                            "message": "Modal application base URL is not configured. Please set the MODAL_APP_BASE_URL environment variable.",
+                            "input_received": input_string
                         }
                     }
+                modal_endpoint_url = f"{base_modal_url.rstrip('/')}/analyze_video"
 
-                print("Calling Modal function for transcription...")
-                # Using .remote() for asynchronous execution, .call() for synchronous
-                # For Gradio, synchronous (.call()) might be simpler to handle the response directly.
-                transcription = f.remote(video_bytes_content) # Use .remote() for Modal function call
-                print(f"Received transcription from Modal: {transcription[:100]}...")
-                return {
-                    "status": "success",
-                    "data": {
-                        "transcription": transcription
+                files = {'video_file': (os.path.basename(video_path_to_process), video_bytes_content, 'video/mp4')}
+                
+                print(f"Calling Modal endpoint: {modal_endpoint_url}")
+                try:
+                    response = requests.post(modal_endpoint_url, files=files, timeout=1860) # Timeout slightly longer than Modal function
+                    response.raise_for_status()  # Raise an exception for HTTP errors (4xx or 5xx)
+                    analysis_results = response.json()
+                    print(f"Received results from Modal endpoint: {str(analysis_results)[:200]}...")
+                    return {
+                        "status": "success",
+                        "data": analysis_results
                     }
-                }
+                except requests.exceptions.Timeout:
+                    print(f"Request to Modal endpoint {MODAL_ENDPOINT_URL} timed out.")
+                    return {
+                        "status": "error",
+                        "error_details": {
+                            "message": "Request to video analysis service timed out.",
+                            "endpoint_url": MODAL_ENDPOINT_URL
+                        }
+                    }
+                except requests.exceptions.HTTPError as e:
+                    print(f"HTTP error calling Modal endpoint {MODAL_ENDPOINT_URL}: {e.response.status_code} - {e.response.text}")
+                    return {
+                        "status": "error",
+                        "error_details": {
+                            "message": f"Video analysis service returned an error: {e.response.status_code}",
+                            "details": e.response.text,
+                            "endpoint_url": MODAL_ENDPOINT_URL
+                        }
+                    }
+                except requests.exceptions.RequestException as e:
+                    print(f"Error calling Modal endpoint {MODAL_ENDPOINT_URL}: {e}")
+                    return {
+                        "status": "error",
+                        "error_details": {
+                            "message": "Failed to connect to video analysis service.",
+                            "details": str(e),
+                            "endpoint_url": MODAL_ENDPOINT_URL
+                        }
+                    }
             except FileNotFoundError:
                 print(f"Error: Video file not found at {video_path_to_process} before sending to Modal.")
                 return {
@@ -249,7 +275,7 @@ api_interface = gr.Interface(
     outputs=gr.JSON(label="API Response"),
     title="Video Interpretation Input",
     description="Provide a video URL or local file path to get its interpretation status as JSON.",
-    allow_flagging="never",
+    flagging_options=None,
     examples=[
         ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
         ["https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"]
@@ -257,29 +283,76 @@ api_interface = gr.Interface(
 )
 
 # Gradio Interface for a simple user-facing demo
-def demo_process_video(input_string: str) -> str:
+def demo_process_video(input_string: str) -> tuple[str, Dict[str, Any]]:
     """
     A simple demo function for the Gradio UI.
-    It calls the same backend logic as the API.
+    It calls process_video_input and unpacks its result for separate display.
     """
-    print(f"Demo received input: {input_string}")
-    result = process_video_input(input_string) # Call the core logic
-    return result
+    result = process_video_input(input_string)
+    status_str = result.get("status", "Unknown Status")
+    
+    # The second part of the tuple should be the 'data' if successful, 
+    # or the 'error_details' (or the whole result) if there was an error.
+    if status_str == "success" and "data" in result:
+        details_json = result["data"]
+    elif "error_details" in result:
+        details_json = result["error_details"]
+    else: # Fallback, show the whole result
+        details_json = result
+        
+    return status_str, details_json
+
+
+def call_topic_analysis_endpoint(topic_str: str, max_vids: int) -> Dict[str, Any]:
+    """Calls the Modal FastAPI endpoint for topic-based video analysis."""
+    if not topic_str:
+        return {"status": "error", "error_details": {"message": "Topic cannot be empty."}}
+    if not (1 <= max_vids <= 10): # Max 10 as defined in FastAPI endpoint, can adjust
+        return {"status": "error", "error_details": {"message": "Max videos must be between 1 and 10."}}
+
+    base_modal_url = os.getenv("MODAL_APP_BASE_URL")
+    if not base_modal_url:
+        print("ERROR: MODAL_APP_BASE_URL environment variable not set.")
+        return {
+            "status": "error",
+            "error_details": {
+                "message": "Modal application base URL is not configured. Please set the MODAL_APP_BASE_URL environment variable."
+            }
+        }
+    topic_endpoint_url = f"{base_modal_url.rstrip('/')}/analyze_topic"
+
+    params = {"topic": topic_str, "max_videos": max_vids}
+    print(f"Calling Topic Analysis endpoint: {topic_endpoint_url} with params: {params}")
+
+    try:
+        # Using POST as defined in modal_whisper_app.py for /analyze_topic
+        response = requests.post(topic_endpoint_url, params=params, timeout=3660) # Long timeout for multiple videos
+        response.raise_for_status()
+        results = response.json()
+        print(f"Received results from Topic Analysis endpoint: {str(results)[:200]}...")
+        return results # The endpoint should return the aggregated JSON directly
+    except requests.exceptions.Timeout:
+        print(f"Request to Topic Analysis endpoint {topic_endpoint_url} timed out.")
+        return {"status": "error", "error_details": {"message": "Request to topic analysis service timed out."}}
+    except requests.exceptions.HTTPError as e:
+        print(f"HTTP error calling Topic Analysis endpoint {topic_endpoint_url}: {e.response.status_code} - {e.response.text}")
+        return {"status": "error", "error_details": {"message": f"Topic analysis service returned an error: {e.response.status_code}", "details": e.response.text}}
+    except requests.exceptions.RequestException as e:
+        print(f"Error calling Topic Analysis endpoint {topic_endpoint_url}: {e}")
+        return {"status": "error", "error_details": {"message": "Failed to connect to topic analysis service.", "details": str(e)}}
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return {"status": "error", "error_details": {"message": "An unexpected error occurred during topic analysis call.", "details": str(e)}}
 
 demo_interface = gr.Interface(
     fn=demo_process_video,
-    inputs=gr.Textbox(label="Upload Video URL or Local File Path for Demo", 
-                      placeholder="Enter YouTube URL, direct video URL (.mp4, .mov, etc.), or local file path..."),
-    outputs="text",
+    inputs=gr.Textbox(lines=1, label="Video URL or Local File Path", placeholder="Enter YouTube URL, direct video URL, or local file path..."),
+    outputs=[gr.Textbox(label="Status"), gr.JSON(label="Comprehensive Analysis Output", scale=2)],
     title="Video Interpretation Demo",
     description="Provide a video URL or local file path to see its transcription status.",
-    allow_flagging="never"
+    flagging_options=None
 )
 
-# JavaScript to find and replace the 'Use via API' link text
-# This attempts to change the text a few times in case Gradio renders elements late.
-js_code_for_head = """
-(function() {
     console.log('[MCP Script] Initializing script to change API link text...');
     let foundAndChangedGlobal = false; // Declare here to be accessible in setInterval
 
@@ -330,10 +403,80 @@ with gr.Blocks(head=f"<script>{js_code_for_head}</script>") as app:
         api_interface.render()
         gr.Markdown("**Note:** Some YouTube videos may fail to download if they require login or cookie authentication due to YouTube's restrictions. Direct video links are generally more reliable for automated processing.")
 
+    with gr.Tab("Interactive Demo"):
+        gr.Markdown("### Test the Full Video Analysis Pipeline")
+        gr.Markdown("Enter a video URL or local file path to get a comprehensive JSON output including transcription, caption, actions, and objects.")
+        with gr.Row():
+            text_input = gr.Textbox(lines=1, label="Video URL or Local File Path", placeholder="Enter YouTube URL, direct video URL, or local file path...", scale=3)
+        
+        analysis_output = gr.JSON(label="Comprehensive Analysis Output", scale=2)
+        
+        with gr.Row():
+            submit_button = gr.Button("Get Comprehensive Analysis", variant="primary", scale=1)
+            clear_button = gr.Button("Clear", scale=1)
+
+        # The 'process_video_input' function returns a single dictionary.
+        submit_button.click(fn=process_video_input, inputs=[text_input], outputs=[analysis_output])
+
+        def clear_all():
+            return [None, None] # Clears text_input and analysis_output
+        clear_button.click(fn=clear_all, inputs=[], outputs=[text_input, analysis_output])
+
+        gr.Examples(
+            examples=[
+                ["https://www.youtube.com/watch?v=dQw4w9WgXcQ"],
+                ["http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"],
+                # Add a local file path example if you have a common test video, e.g.:
+                # ["./sample_video.mp4"] # User would need this file locally
+            ],
+            inputs=text_input,
+            outputs=analysis_output, 
+            fn=process_video_input, 
+            cache_examples=False, 
+        )
+        gr.Markdown("**Processing can take several minutes** depending on video length and model inference times. The cache on the Modal backend will speed up repeated requests for the same video.")
+
     with gr.Tab("Demo (for Manual Testing)"):
         gr.Markdown("### Manually test video URLs or paths for interpretation and observe the JSON response.")
         demo_interface.render()
 
+    with gr.Tab("Topic Video Analysis"):
+        gr.Markdown("### Analyze Multiple Videos Based on a Topic")
+        gr.Markdown("Enter a topic, and the system will search for relevant videos, analyze them, and provide an aggregated JSON output.")
+        
+        with gr.Row():
+            topic_input = gr.Textbox(label="Enter Topic", placeholder="e.g., 'best cat videos', 'Python programming tutorials'", scale=3)
+            max_videos_input = gr.Number(label="Max Videos to Analyze", value=3, minimum=1, maximum=5, step=1, scale=1) # Max 5 for UI, backend might support more
+        
+        topic_analysis_output = gr.JSON(label="Topic Analysis Results")
+        
+        with gr.Row():
+            topic_submit_button = gr.Button("Analyze Topic Videos", variant="primary")
+            topic_clear_button = gr.Button("Clear")
+
+        topic_submit_button.click(
+            fn=call_topic_analysis_endpoint, 
+            inputs=[topic_input, max_videos_input], 
+            outputs=[topic_analysis_output]
+        )
+
+        def clear_topic_outputs():
+            return [None, 3, None] # topic_input, max_videos_input (reset to default), topic_analysis_output
+        topic_clear_button.click(fn=clear_topic_outputs, inputs=[], outputs=[topic_input, max_videos_input, topic_analysis_output])
+        
+        gr.Examples(
+            examples=[
+                ["AI in healthcare", 2],
+                ["sustainable energy solutions", 3],
+                ["how to make sourdough bread", 1]
+            ],
+            inputs=[topic_input, max_videos_input],
+            outputs=topic_analysis_output,
+            fn=call_topic_analysis_endpoint,
+            cache_examples=False
+        )
+        gr.Markdown("**Note:** This process involves searching for videos and then analyzing each one. It can take a significant amount of time, especially for multiple videos. The backend has a long timeout, but please be patient.")
+
 # Launch the Gradio application
 if __name__ == "__main__":
-    app.launch(server_name="0.0.0.0")
+    app.launch(debug=True, server_name="0.0.0.0")
