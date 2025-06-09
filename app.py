@@ -321,7 +321,7 @@ js_code_for_head = """
 
 # Combine interfaces into a Blocks app
 with gr.Blocks(head=f"<script>{js_code_for_head}</script>") as app:
-    gr.Markdown("# Contextual Video Data Server")
+    gr.Markdown("# LLM Video interpretation MCP")
     gr.Markdown("This Hugging Face Space acts as a backend for processing video context for AI models.")
 
     with gr.Tab("API Endpoint (for AI Models)"):
