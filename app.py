@@ -285,6 +285,7 @@ with gr.Blocks() as app:
         gr.Markdown("### Use this endpoint from another application (e.g., another Hugging Face Space).")
         gr.Markdown("The `process_video_input` function is exposed here.")
         api_interface.render()
+        gr.Markdown("**Note:** Some YouTube videos may fail to download if they require login or cookie authentication due to YouTube's restrictions. Direct video links are generally more reliable for automated processing.")
 
     with gr.Tab("Demo (for Manual Testing)"):
         gr.Markdown("### Manually test video URLs or paths and observe the response.")
@@ -296,26 +297,46 @@ if __name__ == "__main__":
     # This attempts to change the text a few times in case Gradio renders elements late.
     js_code = """
 (function() {
+    console.log('[MCP Script] Initializing script to change API link text...');
     function attemptChangeApiLinkText() {
-        const links = document.querySelectorAll('a'); // Get all anchor tags
-        let changed = false;
+        const links = document.querySelectorAll('a');
+        let foundAndChanged = false;
+        // console.log('[MCP Script] Found ' + links.length + ' anchor tags on this attempt.'); // Can be too verbose for interval
         for (let i = 0; i < links.length; i++) {
-            // Check if the link's text content is exactly 'Use via API'
-            if (links[i].textContent && links[i].textContent.trim() === 'Use via API') {
+            const linkText = links[i].textContent ? links[i].textContent.trim() : '';
+            if (linkText === 'Use via API') {
                 links[i].textContent = 'Use as an MCP or via API';
-                changed = true;
-                // If you only expect one such link and want to stop after the first, uncomment the next line
-                // break; 
+                console.log('[MCP Script] Successfully changed \"Use via API\" link text.');
+                foundAndChanged = true;
+                break; 
             }
         }
-        return changed;
+        return foundAndChanged;
     }
 
     let attempts = 0;
-    const maxAttempts = 30; // Try for up to 3 seconds (30 * 100ms)
+    const maxAttempts = 50; // Try for up to 5 seconds (50 * 100ms)
+    let initialScanDone = false;
     const intervalId = setInterval(() => {
+        if (!initialScanDone && attempts === 0) {
+            console.log('[MCP Script] Performing initial scan for API link text.');
+            initialScanDone = true;
+        }
         if (attemptChangeApiLinkText() || attempts >= maxAttempts) {
             clearInterval(intervalId);
+            if (attempts >= maxAttempts && !foundAndChanged) {
+                // Check if the link was ever found and changed by a concurrent script or if it's truly not there
+                let stillNotFound = true;
+                const finalLinks = document.querySelectorAll('a');
+                for (let i = 0; i < finalLinks.length; i++) {
+                    if (finalLinks[i].textContent && finalLinks[i].textContent.trim() === 'Use as an MCP or via API') {
+                        stillNotFound = false; break;
+                    }
+                }
+                if (stillNotFound) {
+                    console.log('[MCP Script] Max attempts reached. \"Use via API\" link was not found or changed. It might not be rendered or has a different text.');
+                }
+            }
         }
         attempts++;
     }, 100);
