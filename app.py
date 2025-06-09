@@ -244,7 +244,7 @@ def process_video_input(input_string: str) -> Dict[str, Any]:
 # Gradio Interface for the API endpoint
 api_interface = gr.Interface(
     fn=process_video_input,
-    inputs=gr.Textbox(lines=1, label="Video URL or Local File Path for Interpretation"), 
+    inputs=gr.Textbox(lines=1, label="Video URL or Local File Path for Interpretation",
                       placeholder="Enter YouTube URL, direct video URL (.mp4, .mov, etc.), or local file path..."),
     outputs=gr.JSON(label="API Response"),
     title="Video Interpretation Input",
